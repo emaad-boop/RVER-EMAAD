@@ -1,1 +1,12 @@
-
+As I have used AI to solve the problem .
+But here the main catch is that thte thing ehat is to be done in this project is to not get the expected output.
+As from  the output and many paths of the rover we can say that it is a drive robot and our only task is to reach any point within 0.10m tolerence.
+as when i am trying to do it one by one and as not being fimiliar with the lang i was not able to understand the taske clearly and am trrying to get the desired output 
+and am always getting some errors and was very upset with the process .
+mainly while seeing the expected output i am not albe to understand what is the thing we have to find but late seeing the codes and lib i barely able to understand that 
+the expectecd output are the latitudes and longitudes.
+the main problem with me is to run the code as i have no software to run the posix thread .So using claude as using before i get to know about the environments in which the pthread 
+commands can run so thats call WSL.
+so I run the commands even after installing I wqas not able to get the output as i am not using the root library and even after getting the output i was cofused with the output that 
+it has some errors.but later asking the AI i got to know that it is a drive robot and our main task is to make it to reach the desired destination and not getting the output
+as due to multiple/infinite valid paths their is an error .        
