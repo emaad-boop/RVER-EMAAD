@@ -2,17 +2,13 @@
 #define EN_DC_H_
 
 
-/*****************************************************************************
- * Includes
- ****************************************************************************/
+
 
 #include <stdint.h>
 #include <stdlib.h>
 
 
-/*****************************************************************************
- * Defines
- ****************************************************************************/
+
 
 #define ENCODE_DST_BUF_LEN_MAX(SRC_LEN)            (((SRC_LEN) == 0u) ? 1u : ((SRC_LEN) + (((SRC_LEN) + 253u) / 254u)))
 #define DECODE_DST_BUF_LEN_MAX(SRC_LEN)            (((SRC_LEN) == 0u) ? 0u : ((SRC_LEN) - 1u))
@@ -20,9 +16,6 @@
 #define ENCODE_SRC_OFFSET(SRC_LEN)                 (((SRC_LEN) + 253u)/254u)
 
 
-/*****************************************************************************
- * Typedefs
- ****************************************************************************/
 
 typedef enum
 {
@@ -54,9 +47,7 @@ typedef struct
 } decode_result;
 
 
-/*****************************************************************************
- * Function prototypes
- ****************************************************************************/
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -69,8 +60,8 @@ decode_result frame_decode(void * dst_buf_ptr, size_t dst_buf_len,
                                const void * src_ptr, size_t src_len);
 
 #ifdef __cplusplus
-} /* extern "C" */
+} 
 #endif
 
 
-#endif /* EN_DC_H_ */
+#endif 
