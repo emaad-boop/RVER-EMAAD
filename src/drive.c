@@ -9,7 +9,7 @@
 #include <math.h>
 #include <stdbool.h>
 
-#define PI_F 3.14159265358979323846f
+#define PI_F             3.14159265358979323846f
 
 #define WHEEL_RADIUS      0.15f
 #define WHEEL_SEPARATION  0.77f
@@ -57,25 +57,27 @@ static bool  apply_wheel_velocities(struct rover_state *rover,
                                      struct wheel_velocity velocity);
 
 /*
- * Candidate task
- * --------------
- * drive_to_target() — proportional heading controller
+ * Candidate task — drive_to_target()
+ * ------------------------------------
+ * Proportional heading controller with cosine-scaled linear velocity.
  *
- * Algorithm:
- *  1. Validate rover and target pointers / finite values.
- *  2. On each time-step:
- *     a. Compute (dx, dy) = target - rover position (east / north).
- *     b. Compute Euclidean distance; stop if <= TARGET_TOLERANCE.
- *     c. Compute desired heading = atan2(dy, dx).
- *     d. Compute heading error = normalize_angle(desired - current).
- *     e. Set angular velocity proportional to heading error (clamped).
- *     f. Set linear velocity = MAX; reduce to 0 when heading error > 90 deg.
- *     g. Convert (linear, angular) -> individual wheel velocities via:
- *          v_left  = (linear - angular * L/2) / R
- *          v_right = (linear + angular * L/2) / R
- *     h. Clamp each wheel velocity to [-MAX_WHEEL_VELOCITY, MAX_WHEEL_VELOCITY].
- *     i. Apply velocities; return DRIVE_INVALID_COMMAND if helper rejects them.
- *  3. Return DRIVE_MAX_STEPS_EXCEEDED if target not reached within MAX_DRIVE_STEPS.
+ * Algorithm per time-step:
+ *  1. Validate rover and target (null + finite check).
+ *  2. Compute (dx=east, dy=north) displacement to target.
+ *  3. Stop when Euclidean distance <= TARGET_TOLERANCE.
+ *  4. desired_heading = atan2f(north, east)  [matches rover convention].
+ *  5. heading_error   = normalize_angle(desired - current).
+ *  6. angular_vel     = HEADING_GAIN * error  (clamped to MAX_ANGULAR_VELOCITY).
+ *  7. linear_vel      = MAX_LINEAR * cos(error) clamped to [0, MAX_LINEAR].
+ *       - When aligned (error=0)   : full speed forward.
+ *       - When 90° off (error=pi/2): zero forward, pure rotation.
+ *       - Smooth arc in between.
+ *  8. Convert to individual wheel velocities (differential-drive kinematics):
+ *       v_left  = (linear - angular * L/2) / R
+ *       v_right = (linear + angular * L/2) / R
+ *  9. Clamp each wheel to [-MAX_WHEEL_VELOCITY, MAX_WHEEL_VELOCITY].
+ * 10. Apply via simulator helper; return DRIVE_INVALID_COMMAND on rejection.
+ * 11. Return DRIVE_MAX_STEPS_EXCEEDED if target not reached within budget.
  */
 enum drive_status drive_to_target(struct rover_state *rover,
                                    const struct coordinate *target) {
@@ -94,32 +96,36 @@ enum drive_status drive_to_target(struct rover_state *rover,
   int step;
   for (step = 0; step < MAX_DRIVE_STEPS; step++) {
 
-    /* Step 2a – Direction vector to target (east = longitude, north = latitude) */
+    /* Step 2 – Direction vector (east=longitude axis, north=latitude axis) */
     float dx = target->longitude - rover->position.longitude;  /* east  */
     float dy = target->latitude  - rover->position.latitude;   /* north */
 
-    /* Step 2b – Distance check */
+    /* Step 3 – Distance check */
     float distance = hypotf(dx, dy);
     if (distance <= TARGET_TOLERANCE) {
       return DRIVE_REACHED_TARGET;
     }
 
-    /* Step 2c – Desired heading (atan2 convention matches rover: 0=east, CCW+) */
+    /* Step 4 – Desired heading (zero=east, CCW positive — matches atan2) */
     float desired_heading = atan2f(dy, dx);
 
-    /* Step 2d – Heading error with wraparound handling */
+    /* Step 5 – Heading error with wraparound */
     float heading_error = normalize_angle(desired_heading - rover->heading_rad);
 
-    /* Step 2e – Angular velocity proportional to heading error, clamped */
+    /* Step 6 – Angular velocity proportional to error, clamped */
     float angular_vel = HEADING_GAIN * heading_error;
     if (angular_vel >  MAX_ANGULAR_VELOCITY) angular_vel =  MAX_ANGULAR_VELOCITY;
     if (angular_vel < -MAX_ANGULAR_VELOCITY) angular_vel = -MAX_ANGULAR_VELOCITY;
 
-    /* Step 2f – Linear velocity: slow to zero when heading error > 90 degrees */
-    float abs_error = (heading_error < 0.0f) ? -heading_error : heading_error;
-    float linear_vel = (abs_error > (PI_F / 2.0f)) ? 0.0f : MAX_LINEAR_VELOCITY;
+    /* Step 7 – Linear velocity: cosine-scaled so the rover arcs smoothly.
+     * cos(0)    = 1.0  -> full forward when aligned.
+     * cos(pi/2) = 0.0  -> pure rotation when 90 degrees off.
+     * Clamped to [0, MAX] so we never drive backwards during a turn.
+     */
+    float cos_err   = cosf(heading_error);
+    float linear_vel = MAX_LINEAR_VELOCITY * (cos_err > 0.0f ? cos_err : 0.0f);
 
-    /* Step 2g – Differential-drive kinematics
+    /* Step 8 – Differential-drive kinematics
      *   v_left  = (V_linear - omega * L/2) / R
      *   v_right = (V_linear + omega * L/2) / R
      */
@@ -127,20 +133,20 @@ enum drive_status drive_to_target(struct rover_state *rover,
     float v_left   = (linear_vel - angular_vel * half_sep) / WHEEL_RADIUS;
     float v_right  = (linear_vel + angular_vel * half_sep) / WHEEL_RADIUS;
 
-    /* Step 2h – Clamp to maximum wheel velocity */
+    /* Step 9 – Clamp to maximum wheel velocity */
     if (v_left  >  MAX_WHEEL_VELOCITY) v_left  =  MAX_WHEEL_VELOCITY;
     if (v_left  < -MAX_WHEEL_VELOCITY) v_left  = -MAX_WHEEL_VELOCITY;
     if (v_right >  MAX_WHEEL_VELOCITY) v_right =  MAX_WHEEL_VELOCITY;
     if (v_right < -MAX_WHEEL_VELOCITY) v_right = -MAX_WHEEL_VELOCITY;
 
-    /* Step 2i – Apply velocities via simulator helper */
+    /* Step 10 – Apply via simulator helper */
     struct wheel_velocity vel = {v_left, v_right};
     if (!apply_wheel_velocities(rover, vel)) {
       return DRIVE_INVALID_COMMAND;
     }
   }
 
-  /* Step 3 – Did not converge within step budget */
+  /* Step 11 – Budget exhausted */
   return DRIVE_MAX_STEPS_EXCEEDED;
 }
 
